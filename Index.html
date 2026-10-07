@@ -1,139 +1,3 @@
-<!doctype html>
-<html lang="hi">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#02080f">
-<title>J.A.R.V.I.S.</title>
-<style>
-:root{--bg:#02080f;--c:#27e6ff;--dim:#0e3a47;--ink:#d8f7ff}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:var(--bg);color:var(--ink);font-family:"Trebuchet MS",system-ui,sans-serif;overflow:hidden}
-body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px}
-h1{font-size:15px;letter-spacing:.35em;color:var(--c);font-weight:600}
-#st{font-size:12px;color:#7fb8c6}
-button{font:inherit;color:var(--c);background:none;border:1px solid var(--dim);border-radius:10px;padding:8px 12px;cursor:pointer}
-button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--c)}
-#orbw{flex:0 0 38%;min-height:200px;display:grid;place-items:center;touch-action:manipulation}
-#o{width:min(78vw,300px);aspect-ratio:1;cursor:pointer}
-#log{flex:1;overflow-y:auto;padding:8px 16px;display:flex;flex-direction:column;gap:8px;font-size:15px;line-height:1.45}
-.m{max-width:88%;padding:8px 12px;border-radius:12px}
-.u{align-self:flex-end;background:#0b2a35;color:#bfefff}
-.j{align-self:flex-start;border:1px solid var(--dim)}
-.s{align-self:center;color:#ffb24a;font-size:13px}
-#bar{display:flex;gap:8px;padding:10px 12px}
-#t{flex:1;background:#041520;border:1px solid var(--dim);border-radius:10px;color:var(--ink);padding:10px 12px;font:inherit}
-#mic.on{background:var(--c);color:#02080f}
-#boot,#set{position:fixed;inset:0;background:rgba(2,8,15,.96);display:none;flex-direction:column;gap:14px;align-items:center;justify-content:center;padding:24px;text-align:center}
-#boot{display:flex}
-#boot button{font-size:18px;letter-spacing:.2em;padding:14px 28px}
-#set label{display:flex;flex-direction:column;gap:6px;width:100%;max-width:360px;text-align:left;font-size:13px;color:#7fb8c6}
-#set input,#set select{background:#041520;border:1px solid var(--dim);border-radius:8px;color:var(--ink);padding:10px;font:inherit}
-p.n{font-size:12px;color:#7fb8c6;max-width:360px}
-@media (prefers-reduced-motion:reduce){#o{animation:none}}
-</style>
-</head>
-<body>
-<header><h1>J.A.R.V.I.S.</h1><span id="st">standby</span><button id="gear" aria-label="Settings">Settings</button></header>
-<div id="orbw"><canvas id="o"></canvas></div>
-<div id="log"></div>
-<div id="bar"><input id="t" placeholder="Type or say “Hey Jarvis”" autocomplete="off"><button id="send">Send</button><button id="mic">Mic</button></div>
-
-<div id="boot"><h1 style="font-size:22px">J.A.R.V.I.S.</h1><p class="n">Voice assistant. Tap to start, allow the microphone, then say “Hey Jarvis”.</p><button id="go">INITIALISE</button></div>
-
-<div id="set">
-<label>Google Gemini API key<input id="key" type="password" placeholder="AIza..."></label>
-<label>Model<input id="model" placeholder="gemini-2.5-flash"></label>
-<label>Language<select id="lang"><option value="hi-IN">हिन्दी</option><option value="en-IN">English (India)</option><option value="en-US">English (US)</option></select></label>
-<label>Voice replies<select id="voice"><option value="1">On</option><option value="0">Off</option></select></label>
-<p class="n">The key is stored only in this browser and sent only to Google. Free key: aistudio.google.com/apikey</p>
-<button id="save">Save</button>
-</div>
-
-<script>
-const $=s=>document.querySelector(s);
-let S={model:'gemini-2.5-flash',lang:'hi-IN',voice:'1',key:''};
-try{Object.assign(S,JSON.parse(localStorage.getItem('jv')||'{}'))}catch{}
-const WAKE=/jarvis|jarwis|जार्विस|जारविस|जर्विस|जार्वीस|जार्विज़/i;
-const SYS=()=>`You are J.A.R.V.I.S., a calm, witty, highly capable voice assistant on a phone. Your replies are spoken aloud: keep them short (1-3 sentences unless asked for more), plain text only, no markdown, no lists, no emojis. Reply in the language the user speaks (Hindi, English or Hinglish; for Hindi use Devanagari). Use the web_search tool for anything current or factual that may have changed. Be direct and helpful. Current date/time: ${new Date().toString()}.`;
-let st='idle',H=[],on=false,rec,awakeT,busy=false;
-
-/* ---------- reactor ---------- */
-const cv=$('#o'),x=cv.getContext('2d');
-function fit(){const d=devicePixelRatio||1,r=cv.getBoundingClientRect();cv.width=r.width*d;cv.height=r.height*d}
-addEventListener('resize',fit);fit();
-const COL={idle:'39,230,255',awake:'110,255,190',think:'255,184,60',speak:'90,170,255'};
-function draw(t){
-  const w=cv.width,h=cv.height,cx=w/2,cy=h/2,R=Math.min(w,h)/2*.92,col=COL[st];
-  x.clearRect(0,0,w,h);
-  const amp=st==='speak'?.05+.04*Math.sin(t/80)+.03*Math.sin(t/31):st==='think'?.03*Math.sin(t/200):.01*Math.sin(t/700);
-  const g=x.createRadialGradient(cx,cy,0,cx,cy,R*.5);
-  g.addColorStop(0,`rgba(${col},.95)`);g.addColorStop(1,`rgba(${col},0)`);
-  x.fillStyle=g;x.beginPath();x.arc(cx,cy,R*(.44+amp),0,7);x.fill();
-  x.lineWidth=2*(devicePixelRatio||1);
-  for(let i=0;i<4;i++){
-    const r=R*(.56+i*.11)*(1+amp*(i%2?1:-1));
-    x.strokeStyle=`rgba(${col},${.9-i*.17})`;
-    x.setLineDash(i%2?[r*.28,r*.12]:[r*.85,r*.06]);
-    x.lineDashOffset=-t*(i%2?.05:-.035)*(i+1)*.5;
-    x.beginPath();x.arc(cx,cy,r,0,7);x.stroke();
-  }
-  for(let k=0;k<36;k++){
-    const a=k/36*Math.PI*2,r1=R*.99,r2=R*(k%3?1.0:.95);
-    x.strokeStyle=`rgba(${col},.5)`;x.setLineDash([]);
-    x.beginPath();x.moveTo(cx+Math.cos(a)*r2,cy+Math.sin(a)*r2);x.lineTo(cx+Math.cos(a)*r1,cy+Math.sin(a)*r1);x.stroke();
-  }
-  requestAnimationFrame(draw);
-}
-requestAnimationFrame(draw);
-
-/* ---------- ui helpers ---------- */
-const LABEL={idle:'say “Hey Jarvis”',awake:'listening',think:'thinking',speak:'speaking'};
-function setSt(s){st=s;$('#st').textContent=on||s!=='idle'?LABEL[s]:'standby'}
-function log(c,t){const d=document.createElement('div');d.className='m '+c;d.textContent=t;const L=$('#log');L.append(d);while(L.children.length>40)L.firstChild.remove();L.scrollTop=L.scrollHeight}
-function awake(){clearTimeout(awakeT);setSt('awake');awakeT=setTimeout(()=>{if(st==='awake')setSt('idle')},10000)}
-
-/* ---------- speech in ---------- */
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-function startRec(){
-  if(!SR){log('s','This browser has no speech recognition. Use Chrome on Android, or type.');return}
-  rec=new SR();rec.lang=S.lang;rec.continuous=true;rec.interimResults=false;
-  rec.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal)heard(e.results[i][0].transcript.trim())}};
-  rec.onend=()=>{if(on)setTimeout(()=>{try{rec.start()}catch{}},250)};
-  rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){on=false;$('#mic').classList.remove('on');log('s','Microphone blocked. Allow it in the browser site settings.')}};
-  try{rec.start();on=true;$('#mic').classList.add('on');setSt('idle')}catch{}
-}
-function stopRec(){on=false;$('#mic').classList.remove('on');try{rec.stop()}catch{}setSt('idle')}
-function heard(t){
-  if(!t||busy)return;
-  const m=t.match(WAKE);
-  if(m){
-    const rest=t.slice(m.index+m[0].length).replace(/^[\s,।.!?]+/,'');
-    if(rest.length>2)ask(rest);else awake();
-    return;
-  }
-  if(st==='awake')ask(t);
-}
-
-/* ---------- speech out ---------- */
-function speak(t){
-  if(S.voice!=='1'||!window.speechSynthesis){busy=false;awake();return}
-  speechSynthesis.cancel();
-  const u=new SpeechSynthesisUtterance(t);u.lang=S.lang;
-  const v=speechSynthesis.getVoices().find(v=>v.lang.replace('_','-')===S.lang)||speechSynthesis.getVoices().find(v=>v.lang.startsWith(S.lang.slice(0,2)));
-  if(v)u.voice=v;u.rate=1.02;
-  u.onstart=()=>setSt('speak');
-  u.onend=u.onerror=()=>{busy=false;awake()};
-  setSt('speak');busy=true;speechSynthesis.speak(u);
-}
-function hush(){if(window.speechSynthesis)speechSynthesis.cancel();busy=false}
-
-/* ---------- brain ---------- */
-async function ask(q){
-  if(!S.key){log('s','Add your Google Gemini API key in Settings.');openSet();return}
-  clearTimeout(awakeT);hush();busy=true;setSt('think');
-  log('u',q);H.push({role:'user',content:q});
   let m=H.slice(-20);while(m.length&&m[0].role!=='user')m.shift();
   const contents=m.map(h=>({role:h.role==='user'?'user':'model',parts:[{text:h.content}]}));
   const call=async tools=>{
@@ -163,10 +27,11 @@ $('#gear').onclick=openSet;
 $('#save').onclick=()=>{
   const lang=$('#lang').value,changed=lang!==S.lang;
   S={key:$('#key').value.trim(),model:$('#model').value.trim()||'gemini-2.5-flash',lang,voice:$('#voice').value};
-  try{localStorage.setItem('jv',JSON.stringify(S))}catch{}
+  try{localStorage.setItem('jvg',JSON.stringify(S))}catch{}
   $('#set').style.display='none';
   if(changed&&on){stopRec();setTimeout(startRec,300)}
 };
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 </script>
 </body>
 </html>
