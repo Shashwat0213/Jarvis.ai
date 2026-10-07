@@ -1,0 +1,37 @@
+  let m=H.slice(-20);while(m.length&&m[0].role!=='user')m.shift();
+  const contents=m.map(h=>({role:h.role==='user'?'user':'model',parts:[{text:h.content}]}));
+  const call=async tools=>{
+    const body={systemInstruction:{parts:[{text:SYS()}]},contents,generationConfig:{maxOutputTokens:1000}};
+    if(tools)body.tools=[{google_search:{}}];
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(S.model||'gemini-2.5-flash')+':generateContent',{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':S.key},body:JSON.stringify(body)});
+    return r.json();
+  };
+  try{
+    let d=await call(true);
+    if(d.error&&/search|tool/i.test(d.error.message))d=await call(false);
+    if(d.error)throw new Error(d.error.message);
+    const t=((d.candidates&&d.candidates[0]&&d.candidates[0].content&&d.candidates[0].content.parts)||[]).map(p=>p.text||'').join('').trim()||'...';
+    H.push({role:'assistant',content:t});log('j',t);speak(t.replace(/[*_#`]/g,''));
+  }catch(e){H.pop();busy=false;log('s',e.message);setSt('idle')}
+}
+
+/* ---------- controls ---------- */
+function send(){const v=$('#t').value.trim();if(v){$('#t').value='';ask(v)}}
+$('#send').onclick=send;$('#t').onkeydown=e=>{if(e.key==='Enter')send()};
+$('#mic').onclick=()=>on?stopRec():startRec();
+$('#o').onclick=()=>{if(busy||st==='speak'){hush();awake();return}if(!on)startRec();awake()};
+$('#go').onclick=()=>{$('#boot').style.display='none';if(window.speechSynthesis){speechSynthesis.getVoices();speechSynthesis.speak(new SpeechSynthesisUtterance(''))}
+  if(!S.key)openSet();startRec();log('j','Online. Say “Hey Jarvis”, tap the reactor, or type.')};
+function openSet(){$('#key').value=S.key;$('#model').value=S.model;$('#lang').value=S.lang;$('#voice').value=S.voice;$('#set').style.display='flex'}
+$('#gear').onclick=openSet;
+$('#save').onclick=()=>{
+  const lang=$('#lang').value,changed=lang!==S.lang;
+  S={key:$('#key').value.trim(),model:$('#model').value.trim()||'gemini-2.5-flash',lang,voice:$('#voice').value};
+  try{localStorage.setItem('jvg',JSON.stringify(S))}catch{}
+  $('#set').style.display='none';
+  if(changed&&on){stopRec();setTimeout(startRec,300)}
+};
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
+</html>
