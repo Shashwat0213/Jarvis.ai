@@ -103,20 +103,17 @@ function applyTrackerState(state){
     if(state.favorites) localStorage.setItem("mcuFavorites", JSON.stringify(state.favorites));
     if(state.name)      localStorage.setItem("mcuV3Name",    state.name);
 
-    /* Globals update karo (script.js ke variables) */
-    if(typeof window !== "undefined"){
-        try {
-            /* script.js ke `watched` aur `favorites` re-assign karo */
-            window.eval(`
-                watched   = JSON.parse(localStorage.getItem("mcuWatched"))   || {};
-                favorites = JSON.parse(localStorage.getItem("mcuFavorites")) || {};
-            `);
-        } catch(e) { /* ignore if not accessible */ }
+    /* Update script.js state through an explicit bridge; avoid eval. */
+    if(typeof window.setMCUTrackerState === "function"){
+        window.setMCUTrackerState({
+            watched: state.watched || {},
+            favorites: state.favorites || {},
+            name: state.name || ""
+        });
+    } else {
+        if(typeof window.renderMovies === "function") window.renderMovies();
+        if(typeof window.renderV3 === "function") window.renderV3();
     }
-
-    /* Re-render */
-    if(typeof window.renderMovies === "function") window.renderMovies();
-    if(typeof window.renderV3 === "function")     window.renderV3();
 }
 
 /* =========================================================
