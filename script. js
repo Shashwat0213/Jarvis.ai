@@ -127,6 +127,19 @@ function saveData(){
     if(typeof window.syncToFirebase === "function") window.syncToFirebase();
 }
 
+/* Safe bridge for Firebase module to update the classic-script state. */
+window.setMCUTrackerState = function(state = {}){
+    watched = state.watched && typeof state.watched === "object" ? state.watched : {};
+    favorites = state.favorites && typeof state.favorites === "object" ? state.favorites : {};
+    if(typeof state.name === "string" && state.name.trim()){
+        localStorage.setItem("mcuV3Name", state.name.trim());
+    }
+    localStorage.setItem("mcuWatched", JSON.stringify(watched));
+    localStorage.setItem("mcuFavorites", JSON.stringify(favorites));
+    renderMovies();
+    renderV3();
+};
+
 /* Numeric → id migration */
 (function(){
     const hasNumeric = Object.keys(watched).some(k => /^\d+$/.test(k)) ||
